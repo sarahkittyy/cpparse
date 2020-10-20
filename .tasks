@@ -1,0 +1,13 @@
+[build]
+
+command=cmake -DOVERLOAD_OSTREAMS=ON -DDEV_SANDBOX=ON -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON .. && make
+cwd=build
+
+[test]
+
+command=make test
+cwd=build
+
+[run]
+
+command=./build/sandbox/sandbox
