@@ -48,7 +48,8 @@ Parser<char> AlphaNumeric() {
 }
 
 Parser<std::string> UIntegerS() {
-	return Many1<char, std::string>(Numeric());
+	return Many1<char, std::string>(Numeric()) |
+		   Failure<std::string>("Expected unsigned integer.");
 }
 
 Parser<unsigned int> UInteger() {
@@ -56,7 +57,8 @@ Parser<unsigned int> UInteger() {
 }
 
 Parser<std::string> IntegerS() {
-	return (Char('-') > UIntegerS()) | UIntegerS();
+	return (Char('-') > UIntegerS()) | UIntegerS() |
+		   Failure<std::string>("Expected integer.");
 }
 
 Parser<int> Integer() {
@@ -64,8 +66,9 @@ Parser<int> Integer() {
 }
 
 Parser<std::string> NumberS() {
-	return (IntegerS() | UIntegerS() | String("-") | Const<std::string>("0")) >=
-		   ((Char('.') > UIntegerS()) | Const<std::string>(""));
+	return ((IntegerS() | UIntegerS() | String("-") | Const<std::string>("0")) >=
+			((Char('.') > UIntegerS()) | Const<std::string>(""))) |
+		   Failure<std::string>("Expected number.");
 }
 
 Parser<double> Number() {
@@ -81,7 +84,11 @@ Parser<std::string> String(const std::string&& str) {
 }
 
 Parser<std::string> OfLength(Parser<std::string> p, size_t len) {
-	return p >>= Satisfies<std::string>([len](std::string c) { return c.size() == len; });
+	return (p >>=
+			Satisfies<std::string>(
+				[len](std::string c) { return c.size() == len; })) |
+		   Failure<std::string>(
+			   "Expected a match of length " + std::to_string(len) + ".");
 }
 
 }
