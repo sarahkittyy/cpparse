@@ -10,6 +10,9 @@
 
 namespace cpparse {
 
+template <typename T>
+class ParseResultFuture;
+
 // result from a parser
 template <typename T>
 class ParseResult {
@@ -65,6 +68,8 @@ public:
 	}
 
 private:
+	friend class ParseResultFuture<T>;
+
 	ParseResult(std::optional<T> res, std::stringstream& rest, std::string err = "")
 		: mRes(res), mRest(rest), mErr(err) {}
 

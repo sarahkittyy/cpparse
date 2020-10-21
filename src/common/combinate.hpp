@@ -37,7 +37,7 @@ Parser<Container> Many1(Parser<T> p) {
 // Match 0 or more of a parser
 template <typename T, typename Container = std::vector<T>>
 Parser<Container> Many(Parser<T> p) {
-	return Many1(p) | Const(Container{});
+	return Many1<T, Container>(p) | Const(Container{});
 }
 
 // Match 0 or 1 of a parser.

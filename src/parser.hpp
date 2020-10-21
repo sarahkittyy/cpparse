@@ -17,16 +17,60 @@ using ParserF = std::function<ParseResult<T>(std::stringstream&)>;
 
 typedef std::stringstream::pos_type spos_t;
 
-//base parser class
+// For saving and retrieving parser values hidden in a parser chain.
+template <typename T>
+class Parser;
+template <typename T>
+class ParseResultFuture {
+public:
+	ParseResultFuture() : mBound(nullptr) {}
+	~ParseResultFuture() {
+		if (bound()) {
+			delete mBound;
+		}
+	}
+
+	operator bool() const {
+		return bound();
+	}
+
+	T& result() {
+		if (!bound()) throw std::runtime_error("Attempt to read from not yet received parser result");
+		return mBound->res();
+	}
+
+private:
+	friend class Parser<T>;
+
+	void bind(ParseResult<T>& p) {
+		if (bound()) delete mBound;
+		mBound = new ParseResult<T>(p.mRes, p.mRest, p.mErr);
+	}
+
+	bool bound() const {
+		return mBound != nullptr;
+	}
+
+	// the bound parser result
+	ParseResult<T>* mBound;
+};
+
+// base parser class
 template <typename T>
 class Parser {
 public:
 	//init
-	Parser() {}
-	Parser(ParserF<T> fn) : mComputation(fn) {}
+	Parser() : mBinds() {}
+	Parser(ParserF<T> fn) : mComputation(fn), mBinds() {}
 	virtual ~Parser() {}
 
-	// main parser operator.throws std::parseerror if an error occurs
+	// Bind a variable to be set once the parser returns.
+	Parser<T>& bind(ParseResultFuture<T>* v) {
+		mBinds.push_back(v);
+		return *this;
+	}
+
+	// main parser operator. throws std::parseerror if an error occurs
 	ParseResult<T> operator()(std::stringstream& in) const {
 		if (!mComputation) {
 			throw util::parseerror("No implementation defined!");
@@ -35,6 +79,10 @@ public:
 		ParseResult<T> r = mComputation(in);
 		if (!r) {
 			in.seekg(ipos);
+		}
+		// update all bound futures
+		for (auto& i : mBinds) {
+			i->bind(r);
 		}
 		return r;
 	}
@@ -47,6 +95,8 @@ public:
 private:
 	// internal function for computation
 	ParserF<T> mComputation;
+	// all binds
+	std::vector<ParseResultFuture<T>*> mBinds;
 };
 
 template <typename T, typename... Args>
@@ -54,7 +104,7 @@ using ParserG = std::function<Parser<T>(Args...)>;
 
 // get the results from both parsers and only return the last
 template <typename T, typename U>
-Parser<U> operator>>(Parser<T> lhs, Parser<U> rhs) {
+Parser<U> operator>>(const Parser<T>& lhs, const Parser<U>& rhs) {
 	return Parser<U>([lhs, rhs](std::stringstream& in) {
 		ParseResult<T> r1 = lhs(in);
 		if (!r1) {
@@ -70,7 +120,7 @@ Parser<U> operator>>(Parser<T> lhs, Parser<U> rhs) {
 
 // get the results from both parsers and only return the last, passing the result of the previous parser into the next parser
 template <typename T, typename U>
-Parser<U> operator>>=(Parser<T> lhs, ParserG<U, T> rhs) {
+Parser<U> operator>>=(const Parser<T>& lhs, const ParserG<U, T>& rhs) {
 	return Parser<U>([lhs, rhs](std::stringstream& in) {
 		ParseResult<T> r1 = lhs(in);
 		if (!r1) {
@@ -87,7 +137,7 @@ Parser<U> operator>>=(Parser<T> lhs, ParserG<U, T> rhs) {
 
 // combine the results of two homogenous parsers into a container
 template <typename T, typename Container = std::vector<T>>
-Parser<Container> operator&(Parser<T> lhs, Parser<T> rhs) {
+Parser<Container> operator&(const Parser<T>& lhs, const Parser<T>& rhs) {
 	return Parser<Container>([lhs, rhs](std::stringstream& in) {
 		ParseResult<T> r1 = lhs(in);
 		if (!r1) {
@@ -106,7 +156,7 @@ Parser<Container> operator&(Parser<T> lhs, Parser<T> rhs) {
 
 // append a parser to the results of a list parser.
 template <typename T, typename Container = std::vector<T>>
-Parser<Container> operator<(Parser<Container> lhs, Parser<T> rhs) {
+Parser<Container> operator<(const Parser<Container>& lhs, const Parser<T>& rhs) {
 	return Parser<Container>([lhs, rhs](std::stringstream& in) {
 		ParseResult<Container> r1 = lhs(in);
 		if (!r1) {
@@ -124,7 +174,7 @@ Parser<Container> operator<(Parser<Container> lhs, Parser<T> rhs) {
 
 // prepend a parser to the results of a list parser.
 template <typename T, typename Container = std::vector<T>>
-Parser<Container> operator>(Parser<T> lhs, Parser<Container> rhs) {
+Parser<Container> operator>(const Parser<T>& lhs, const Parser<Container>& rhs) {
 	return Parser<Container>([lhs, rhs](std::stringstream& in) {
 		ParseResult<T> r1 = lhs(in);
 		if (!r1) {
@@ -142,7 +192,7 @@ Parser<Container> operator>(Parser<T> lhs, Parser<Container> rhs) {
 
 // append two list parsers together.
 template <typename Container>
-Parser<Container> operator<=(Parser<Container> lhs, Parser<Container> rhs) {
+Parser<Container> operator<=(const Parser<Container>& lhs, const Parser<Container>& rhs) {
 	return Parser<Container>([lhs, rhs](std::stringstream& in) {
 		ParseResult<Container> r1 = lhs(in);
 		if (!r1) {
@@ -154,13 +204,13 @@ Parser<Container> operator<=(Parser<Container> lhs, Parser<Container> rhs) {
 		}
 		Container rtot = r1.res();
 		rtot.insert(rtot.end(), r2.res().begin(), r2.res().end());
-		return ParseResult<Container>::with(rtot, r2.rest);
+		return ParseResult<Container>::with(rtot, r2.rest());
 	});
 }
 
 // prepend two list parsers together
 template <typename Container>
-Parser<Container> operator>=(Parser<Container> lhs, Parser<Container> rhs) {
+Parser<Container> operator>=(const Parser<Container>& lhs, const Parser<Container>& rhs) {
 	return Parser<Container>([lhs, rhs](std::stringstream& in) {
 		ParseResult<Container> r1 = lhs(in);
 		if (!r1) {
@@ -178,7 +228,7 @@ Parser<Container> operator>=(Parser<Container> lhs, Parser<Container> rhs) {
 
 // provide an alternative parser in case the first fails
 template <typename T>
-Parser<T> operator|(Parser<T> fst, Parser<T> fallback) {
+Parser<T> operator|(const Parser<T>& fst, const Parser<T>& fallback) {
 	return Parser<T>([fst, fallback](std::stringstream& in) {
 		spos_t ipos		  = in.tellg();
 		ParseResult<T> r1 = fst(in);

@@ -75,6 +75,10 @@ Parser<double> Number() {
 	return To<double>(NumberS());
 }
 
+Parser<std::string> Whitespace() {
+	return Many<char, std::string>(Any() >>= Satisfies<char>(isspace));
+}
+
 Parser<std::string> String(const std::string&& str) {
 	if (str.size() == 0) {
 		return Const<std::string>("");

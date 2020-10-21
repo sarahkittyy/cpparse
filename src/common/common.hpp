@@ -22,8 +22,8 @@ Parser<T> Const(T val) {
 }
 
 // Tests a given parameter against a condition
-template <typename T>
-ParserG<T, T> Satisfies(std::function<bool(T)> pred) {
+template <typename T, typename Fn>
+ParserG<T, T> Satisfies(Fn pred) {
 	return [pred](T c) {
 		if (pred(c)) {
 			return Const(c);
@@ -67,6 +67,9 @@ Parser<int> Integer();
 Parser<std::string> NumberS();
 // Matches any number.
 Parser<double> Number();
+
+// Matches as much whitespace as possible
+Parser<std::string> Whitespace();
 
 // Matches an exact string.
 Parser<std::string> String(const std::string&& str);
