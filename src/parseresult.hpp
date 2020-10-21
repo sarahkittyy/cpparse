@@ -79,25 +79,6 @@ private:
 
 #ifdef OVERLOAD_OSTREAMS
 
-// for printing std::tuple
-template <size_t i, std::size_t sz, typename... Args>
-std::ostream& printTuple(std::ostream& os, const std::tuple<Args...>& tup) {
-	os << ", " << std::get<i>(tup);
-	if constexpr (i + 1 != sz) {
-		return printTuple<i + 1, sz, Args...>(os, tup);
-	}
-	return os;
-}
-
-// for printing std::tuple
-template <typename... Args>
-std::ostream& operator<<(std::ostream& os, const std::tuple<Args...>& tup) {
-	os << "(" << std::get<0>(tup);
-	printTuple<1, std::tuple_size<std::tuple<Args...>>::value, Args...>(os, tup);
-	os << ")";
-	return os;
-}
-
 // for printing std::vector
 template <typename T>
 std::ostream& operator<<(std::ostream& os, const std::vector<T>& v) {

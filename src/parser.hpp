@@ -12,69 +12,78 @@
 namespace cpparse {
 
 // parser internal function
-template <typename T, typename... Args>
-using ParserF = std::function<ParseResult<T>(std::stringstream&, Args...)>;
+template <typename T>
+using ParserF = std::function<ParseResult<T>(std::stringstream&)>;
 
 typedef std::stringstream::pos_type spos_t;
 
 //base parser class
-template <typename T, typename... Args>
+template <typename T>
 class Parser {
 public:
 	//init
 	Parser() {}
-	Parser(ParserF<T, Args...> fn) : mComputation(fn) {}
+	Parser(ParserF<T> fn) : mComputation(fn) {}
 	virtual ~Parser() {}
 
 	// main parser operator.throws std::parseerror if an error occurs
-	ParseResult<T> operator()(std::stringstream& in, Args... args) const {
+	ParseResult<T> operator()(std::stringstream& in) const {
 		if (!mComputation) {
 			throw util::parseerror("No implementation defined!");
 		}
 		spos_t ipos		 = in.tellg();
-		ParseResult<T> r = mComputation(in, args...);
+		ParseResult<T> r = mComputation(in);
 		if (!r) {
 			in.seekg(ipos);
 		}
 		return r;
 	}
 
+	// is the parser valid?
+	operator bool() const {
+		return (bool)mComputation;
+	}
+
 private:
 	// internal function for computation
-	ParserF<T, Args...> mComputation;
+	ParserF<T> mComputation;
 };
 
-// combine the results of two heterogenous parsers into one tuple
+template <typename T, typename... Args>
+using ParserG = std::function<Parser<T>(Args...)>;
+
+// get the results from both parsers and only return the last
 template <typename T, typename U>
-Parser<std::tuple<T, U>> operator+(Parser<T> lhs, Parser<U> rhs) {
-	return Parser<std::tuple<T, U>>([lhs, rhs](std::stringstream& in) {
+Parser<U> operator>>(Parser<T> lhs, Parser<U> rhs) {
+	return Parser<U>([lhs, rhs](std::stringstream& in) {
 		ParseResult<T> r1 = lhs(in);
 		if (!r1) {
-			return ParseResult<std::tuple<T, U>>::empty(in, r1.error());
+			return ParseResult<U>::empty(in, r1.error());
 		}
 		ParseResult<U> r2 = rhs(r1.rest());
 		if (!r2) {
-			return ParseResult<std::tuple<T, U>>::empty(in, r2.error());
+			return ParseResult<U>::empty(in, r2.error());
 		}
-		return ParseResult<std::tuple<T, U>>::with(std::make_tuple(r1.res(), r2.res()), r2.rest());
+		return r2;
 	});
 }
 
-// combine the results of two heterogenous parsers into one tuple, passing the first parser's output as an argument to the second parser.
+// get the results from both parsers and only return the last, passing the result of the previous parser into the next parser
 template <typename T, typename U>
-Parser<std::tuple<T, U>> operator+=(Parser<T> lhs, Parser<U, T> rhs) {
-	return Parser<std::tuple<T, U>>([lhs, rhs](std::stringstream& in) {
+Parser<U> operator>>=(Parser<T> lhs, ParserG<U, T> rhs) {
+	return Parser<U>([lhs, rhs](std::stringstream& in) {
 		ParseResult<T> r1 = lhs(in);
 		if (!r1) {
-			return ParseResult<std::tuple<T, U>>::empty(in, r1.error());
+			return ParseResult<U>::empty(in, r1.error());
 		}
-		ParseResult<U> r2 = rhs(r1.rest(), r1.res());
-		if (!r2) {
-			return ParseResult<std::tuple<T, U>>::empty(in, r2.error());
+		Parser<U> r2f = rhs(r1.res());
+		if (!r2f) {
+			return ParseResult<U>::empty(in, "operator >>= ParseG returned nothing");
 		}
-		return ParseResult<std::tuple<T, U>>::with(std::make_tuple(r1.res(), r2.res()), r2.rest());
+		ParseResult<U> r2 = r2f(r1.rest());
+		return r2;
 	});
-}
+};
 
 // combine the results of two homogenous parsers into a container
 template <typename T, typename Container = std::vector<T>>
@@ -85,25 +94,6 @@ Parser<Container> operator&(Parser<T> lhs, Parser<T> rhs) {
 			return ParseResult<Container>::empty(in, r1.error());
 		}
 		ParseResult<T> r2 = rhs(r1.rest());
-		if (!r2) {
-			return ParseResult<Container>::empty(in, r2.error());
-		}
-		Container c;
-		c.insert(c.end(), r1.res());
-		c.insert(c.end(), r2.res());
-		return ParseResult<Container>::with(c, r2.rest);
-	});
-}
-
-// combine the results of two homogenous parsers into a vector, passing the result of the first into the args of the second
-template <typename T, typename Container = std::vector<T>>
-Parser<Container> operator&=(Parser<T> lhs, Parser<T, T> rhs) {
-	return Parser<Container>([lhs, rhs](std::stringstream& in) {
-		ParseResult<T> r1 = lhs(in);
-		if (!r1) {
-			return ParseResult<Container>::empty(in, r1.error());
-		}
-		ParseResult<T> r2 = rhs(r1.rest(), r1.res());
 		if (!r2) {
 			return ParseResult<Container>::empty(in, r2.error());
 		}
@@ -183,38 +173,6 @@ Parser<Container> operator>=(Parser<Container> lhs, Parser<Container> rhs) {
 		Container rtot = r2.res();
 		rtot.insert(rtot.begin(), r1.res().begin(), r1.res().end());
 		return ParseResult<Container>::with(rtot, r2.rest());
-	});
-}
-
-// get the results from both parsers and only return the last
-template <typename T, typename U>
-Parser<U> operator>>(Parser<T> lhs, Parser<U> rhs) {
-	return Parser<U>([lhs, rhs](std::stringstream& in) {
-		ParseResult<T> r1 = lhs(in);
-		if (!r1) {
-			return ParseResult<U>::empty(in, r1.error());
-		}
-		ParseResult<U> r2 = rhs(r1.rest());
-		if (!r2) {
-			return ParseResult<U>::empty(in, r2.error());
-		}
-		return r2;
-	});
-}
-
-// get the results from both parsers and only return the last, passing the result of the previous parser into the next parser
-template <typename T, typename U>
-Parser<U> operator>>=(Parser<T> lhs, Parser<U, T> rhs) {
-	return Parser<U>([lhs, rhs](std::stringstream& in) {
-		ParseResult<T> r1 = lhs(in);
-		if (!r1) {
-			return ParseResult<U>::empty(in, r1.error());
-		}
-		ParseResult<U> r2 = rhs(r1.rest(), r1.res());
-		if (!r2) {
-			return ParseResult<U>::empty(in, r2.error());
-		}
-		return r2;
 	});
 }
 

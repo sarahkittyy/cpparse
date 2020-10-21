@@ -22,27 +22,15 @@ Parser<T> Const(T val) {
 }
 
 // Tests a given parameter against a condition
-template <typename T, typename Fn>
-Parser<T, T> Satisfies(Fn pred) {
-	return Parser<T, T>([pred](std::stringstream& in, T c) {
-		if (pred(c)) {
-			return ParseResult<T>::with(c, in);
-		} else {
-			return ParseResult<T>::empty(in, "Satisfies() Condition was not met.");
-		}
-	});
-}
-
-// Tests a given parameter against a condition
 template <typename T>
-Parser<T, T> SatisfiesL(std::function<bool(T)> pred) {
-	return Parser<T, T>([pred](std::stringstream& in, T c) {
+ParserG<T, T> Satisfies(std::function<bool(T)> pred) {
+	return [pred](T c) {
 		if (pred(c)) {
-			return ParseResult<T>::with(c, in);
+			return Const(c);
 		} else {
-			return ParseResult<T>::empty(in, "Satisfies() Condition was not met.");
+			return Failure<T>("Satisfies() Condition was not met.");
 		}
-	});
+	};
 }
 
 // Match any single character
