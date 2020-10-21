@@ -208,24 +208,6 @@ Parser<Container> operator<=(const Parser<Container>& lhs, const Parser<Containe
 	});
 }
 
-// prepend two list parsers together
-template <typename Container>
-Parser<Container> operator>=(const Parser<Container>& lhs, const Parser<Container>& rhs) {
-	return Parser<Container>([lhs, rhs](std::stringstream& in) {
-		ParseResult<Container> r1 = lhs(in);
-		if (!r1) {
-			return ParseResult<Container>::empty(in, r1.error());
-		}
-		ParseResult<Container> r2 = rhs(r1.rest());
-		if (!r2) {
-			return ParseResult<Container>::empty(in, r2.error());
-		}
-		Container rtot = r2.res();
-		rtot.insert(rtot.begin(), r1.res().begin(), r1.res().end());
-		return ParseResult<Container>::with(rtot, r2.rest());
-	});
-}
-
 // provide an alternative parser in case the first fails
 template <typename T>
 Parser<T> operator|(const Parser<T>& fst, const Parser<T>& fallback) {

@@ -66,7 +66,7 @@ Parser<int> Integer() {
 }
 
 Parser<std::string> NumberS() {
-	return ((IntegerS() | UIntegerS() | String("-") | Const<std::string>("0")) >=
+	return ((IntegerS() | UIntegerS() | String("-") | Const<std::string>("0")) <=
 			((Char('.') > UIntegerS()) | Const<std::string>(""))) |
 		   Failure<std::string>("Expected number.");
 }
